@@ -5,6 +5,7 @@ import websockets
 
 class WSServer:
     HOST = '0.0.0.0'
+    MOVE_DELAY = 100
 
     def __init__(self, server, port, loop=None):
         self._server = server
@@ -42,8 +43,8 @@ class WSServer:
     async def broadcast_session_added(self, data, exclude=None):
         await self.broadcast_event('SESSION_ADDED', data, exclude)
 
-    async def broadcast_session_removed(self, uid, exclude=None):
-        await self.broadcast_event('SESSION_REMOVED', {'Uid': uid}, exclude)
+    async def broadcast_session_removed(self, name, exclude=None):
+        await self.broadcast_event('SESSION_REMOVED', {'Name': name}, exclude)
 
     async def broadcast_event(self, event, data, exclude=None):
         if not self._clients or len(self._clients) == 1 and self._clients[0] == exclude:
@@ -69,12 +70,17 @@ class WSServer:
         if futures:
             await asyncio.wait(futures)
 
-
     async def _handler(self, websocket, path):
         host, port = websocket.remote_address
         logging.debug(f'WS connection from {host}:{port}')
         websocket.msg_seq = 1
         self._clients.append(websocket)
+        if self.MOVE_DELAY > 0:
+            message = json.dumps({'Event': 'MOVE_DELAY_SET',
+                                  'Seq': websocket.msg_seq,
+                                  'IntValue': self.MOVE_DELAY})
+            websocket.msg_seq += 1
+            await websocket.send(message)
         while True:
             try:
                 # Try to receive a message from the client, this throws when
@@ -104,15 +110,17 @@ class WSServer:
             })
 
     def _process_message(self, data, websocket):
-        if 'Event' not in data or 'Uid' not in data:
+        if 'Event' not in data:
             return False
 
-        event, uid = data['Event'], data['Uid']
+        event = data['Event']
         if event == 'ITEM_ADDED':
             # Adding objects through WebSockets only works for non-file
             # objects, in any case clients can add using HTTP requests
             return self._storage.add_object(data) is not None
         elif event == 'ITEM_MOVED':
+            if 'Uid' not in data:
+                return False
             position, scale, rotation = None, None, None
             if 'Position' in data:
                 position = data['Position']
@@ -120,20 +128,28 @@ class WSServer:
                 scale = data['Scale']
             if 'Rotation' in data:
                 rotation = data['Rotation']
-            return self._storage.move_object(uid, websocket, position, scale, rotation)
+            return self._storage.move_object(data['Uid'], websocket, position, scale, rotation)
         elif event == 'ITEM_REMOVED':
+            if 'Uid' not in data:
+                return False
             return self._storage.remove_object(data['Uid'])
         elif event == 'ITEM_SELECTION_CHANGED':
+            if 'Uid' not in data:
+                return False
             if 'IsSelected' not in data:
                 return False
             if data['IsSelected']:
-                return self._storage.select_object(uid, websocket)
+                return self._storage.select_object(data['Uid'], websocket)
             else:
-                return self._storage.deselect_object(uid, websocket)
+                return self._storage.deselect_object(data['Uid'], websocket)
         elif event == 'SESSION_ADDED':
-            return self._storage.add_session(data) is not None
+            if 'Name' not in data:
+                return False
+            return self._storage.add_session(data['Name']) is not None
         elif event == 'SESSION_REMOVED':
-            return self._storage.remove_session(data['Uid'])
+            if 'Name' not in data:
+                return False
+            return self._storage.remove_session(data['Name'])
         else:
             # Unknown message
             return False

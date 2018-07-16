@@ -15,14 +15,15 @@ class WebServer:
         {'url': '/item/download/{uid}', 'handler': 'handle_item_download'},
         {'url': '/item/{uid}', 'handler': 'handle_item'},
         {'url': '/session/all', 'handler': 'handle_session_all'},
-        {'url': '/session/{uid}', 'handler': 'handle_session'})
+        {'url': '/session/{name}', 'handler': 'handle_session'})
     _ROUTES_POST = (
         {'url': '/item/add', 'handler': 'handle_item_add'},
         {'url': '/session/add', 'handler': 'handle_session_add'})
     _ROUTES_DELETE = (
-        {'url': '/item/all/{session}', 'handler': 'handle_item_all'},
+        {'url': '/item/all', 'handler': 'handle_item_all'},
+        {'url': '/item/all/{session}', 'handler': 'handle_item_all_session'},
         {'url': '/item/{uid}', 'handler': 'handle_item'},
-        {'url': '/session/{uid}', 'handler': 'handle_session'})
+        {'url': '/session/{name}', 'handler': 'handle_session'})
 
     def __init__(self, server, port, loop=None):
         self._server = server
@@ -88,7 +89,7 @@ class WebServerGETHandler:
         return web.json_response({'data': data})
 
     async def handle_session(self, req):
-        data = self._storage.get_session(req.match_info['uid'])
+        data = self._storage.get_session(req.match_info['name'])
         if data is not None:
             return web.json_response({'data': data})
         else:
@@ -171,7 +172,7 @@ class WebServerPOSTHandler:
         else:
             return web.HTTPBadRequest(text='Form data required')
 
-    SESSION_TEXT_FIELDS = ('Uid', 'Name')
+    SESSION_TEXT_FIELDS = ('Name')
     SESSION_JSON_FIELDS = ()
 
     async def handle_session_add(self, req):
@@ -218,6 +219,10 @@ class WebServerDELETEHandler:
             return web.HTTPNotFound(text='Object not found')
 
     async def handle_item_all(self, req):
+        self._storage.clear_all()
+        return web.HTTPNoContent()
+
+    async def handle_item_all_session(self, req):
         session = req.match_info['session']
         uids = self._storage.get_all_objects_uid_list(session)
         if self._storage.clear(session):
@@ -226,10 +231,10 @@ class WebServerDELETEHandler:
         return web.HTTPNoContent()
 
     async def handle_session(self, req):
-        uid = req.match_info['uid']
-        if self._storage.can_remove_session(uid):
-            if self._storage.remove_session(uid):
-                await self._ws_server.broadcast_session_removed(uid)
+        name = req.match_info['name']
+        if self._storage.can_remove_session(name):
+            if self._storage.remove_session(name):
+                await self._ws_server.broadcast_session_removed(name)
                 return web.HTTPNoContent()
             else:
                 return web.HTTPNotFound(text='Object not found')

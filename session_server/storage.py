@@ -11,36 +11,34 @@ class Storage:
 
     ### Session API
 
-    def add_session(self, uid, name):
-        logging.debug(f'Adding session: {uid} : {name}')
-        data = {'Uid': uid, 'Name': name}
+    def add_session(self, name):
+        if name == 'default':
+            # Implicit
+            logging.debug(f'Session {name} already exists')
+            return True
+        logging.debug(f'Adding session: {name}')
+        data = {'Name': name}
         if self._engine.add_session(data):
             return data
         return None
 
-    def get_session(self, uid):
-        return self._engine.get_session(uid)
+    def get_session(self, name):
+        return self._engine.get_session(name)
 
-    def get_all_sessions(self, only_removable=False):
-        if only_removable:
-            return self._engine.get_all_sessions(['default'])
-        else:
-            return self._engine.get_all_sessions()
+    def get_all_sessions(self):
+        return self._engine.get_all_sessions()
 
-    def get_all_sessions_uid_list(self, only_removable=False):
-        if only_removable:
-            return self._engine.get_all_sessions_uid_list(['default'])
-        else:
-            return self._engine.get_all_sessions_uid_list()
+    def get_all_sessions_name_list(self):
+        return self._engine.get_all_sessions_name_list()
 
-    def can_remove_session(self, uid):
-        return uid != 'default'
+    def can_remove_session(self, name):
+        return name != 'default'
 
-    def remove_session(self, uid):
-        if uid == 'default':
+    def remove_session(self, name):
+        if name == 'default':
             return False
-        logging.debug(f'Removing session: {uid}')
-        return self._engine.remove_session(uid)
+        logging.debug(f'Removing session: {name}')
+        return self._engine.remove_session(name)
 
     ### Object API
 
@@ -148,6 +146,10 @@ class Storage:
         logging.debug(f'Removing all objects in session {session}')
         return self._engine.clear(session)
 
+    def clear_all(self):
+        logging.debug(f'Removing all objects')
+        return self._engine.clear_all()
+
     def is_object_selected(self, uid, ident=None):
         if uid not in self._selection:
             return False
@@ -158,7 +160,7 @@ class Storage:
             return len(self._selection[uid]) > 0
 
     def move_object(self, uid, ident, position=None, scale=None, rotation=None):
-        logging.debug(f'Moving object: {uid}, position={position}, scale={scale}, rotation={rotation}')
+        # logging.debug(f'Moving object: {uid}, position={position}, scale={scale}, rotation={rotation}')
         if position is not None:
             if not isinstance(position, list) or len(position) != 3:
                 logging.info('Not moving object with invalid position')
@@ -178,7 +180,7 @@ class Storage:
                 self._pending_move[uid] = {}
             if ident not in self._pending_move[uid]:
                 self._pending_move[uid][ident] = [None, None, None]
-            logging.debug('Postponing move')
+            # logging.debug('Postponing move')
             if position is not None:
                 self._pending_move[uid][ident][0] = position
             if scale is not None:
